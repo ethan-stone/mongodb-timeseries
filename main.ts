@@ -27,7 +27,7 @@ async function main() {
   const collection = db.collection<Log>("logs");
 
   const logs: Log[] = [];
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < 100; i++) {
     const log = {
       metadata: { chargingStationId: randomUUID() },
       timestamp: new Date(),
@@ -40,7 +40,7 @@ async function main() {
     logs.push(log);
     console.log(log);
 
-    await setTimeoutPromise(200);
+    await setTimeoutPromise(50);
   }
 
   await collection.insertMany(logs);
