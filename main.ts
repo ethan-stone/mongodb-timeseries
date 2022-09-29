@@ -24,12 +24,7 @@ async function setTimeoutPromise(timeout: number) {
 
 async function main() {
   const db = mongoClient.db("logs");
-  const collection = await db.createCollection<Log>("logs", {
-    timeseries: {
-      timeField: "timestamp",
-      metaField: "metadata"
-    }
-  });
+  const collection = db.collection<Log>("logs");
 
   const logs: Log[] = [];
   for (let i = 0; i < 1000; i++) {
