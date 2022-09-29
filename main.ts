@@ -33,7 +33,7 @@ async function main() {
 
   const logs: Log[] = [];
   for (let i = 0; i < 1000; i++) {
-    logs.push({
+    const log = {
       metadata: { chargingStationId: randomUUID() },
       timestamp: new Date(),
       log: {
@@ -41,12 +41,16 @@ async function main() {
         ocppMessageId: randomUUID(),
         ocppMessagePayload: {}
       }
-    });
+    };
+    logs.push(log);
+    console.log(log);
 
     await setTimeoutPromise(200);
   }
 
   await collection.insertMany(logs);
+
+  console.log("Logs inserted");
 }
 
 main();
