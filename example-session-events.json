@@ -1,0 +1,30 @@
+[
+  {
+    "metadata": {
+      "deviceType": "station",
+      "stationId": "1234567890",
+      "connectorId": 1,
+      "sessionId": "1234567890",
+      "locationId": "1234567890",
+      "networkId": "1234567890",
+      "measurementType": "current"
+    },
+    "timestamp": "2021-01-01T00:00:00Z",
+    "value": 10,
+    "unit": "A"
+  },
+  {
+    "metadata": {
+      "deviceType": "station",
+      "stationId": "1234567890",
+      "connectorId": 1,
+      "sessionId": "1234567890",
+      "locationId": "1234567890",
+      "networkId": "1234567890",
+      "measurementType": "connectorStatusChange"
+    },
+    "timestamp": "2021-01-01T00:00:00Z",
+    "normalizedStatus": "Idle",
+    "rawStatus": "SuspendedEVSE"
+  }
+]

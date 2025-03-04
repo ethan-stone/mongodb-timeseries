@@ -1,0 +1,366 @@
+[
+    {
+      "$match": {
+        "metadata.deviceType": "station",
+        "timestamp": {
+          "$gte": ISODate("2025-02-25T17:55:00.000Z"),
+          "$lt": ISODate("2025-02-25T18:05:00.000Z")
+        },
+        "metadata.locationId": "9f506387d3"
+      }
+    },
+    {
+      "$sort": {
+        "timestamp": 1
+      }
+    },
+    {
+      "$group": {
+        "_id": {
+          "locationId": "$metadata.locationId",
+          "networkId": "$metadata.networkId",
+          "sessionId": "$metadata.sessionId",
+          "binStart": {
+            "$dateTrunc": {
+              "date": "$timestamp",
+              "unit": "minute",
+              "binSize": 5
+            }
+          }
+        },
+        "allEnergyReadings": {
+          "$push": {
+            "value": "$value",
+            "unit": "$unit",
+            "timestamp": "$timestamp",
+            "measurementType": "$metadata.measurementType"
+          }
+        },
+        "maxPowerReadings": {
+          "$push": {
+            "$cond": {
+              "if": {
+                "$and": [
+                  {
+                    "$eq": ["$metadata.measurementType", "powerActiveImport"]
+                  },
+                  {
+                    "$eq": ["$unit", "kW"]
+                  },
+                  {
+                    "$gte": [
+                      "$timestamp",
+                      ISODate("2025-02-25T18:00:00.000Z")
+                    ]
+                  },
+                  {
+                    "$lt": [
+                      "$timestamp",
+                      ISODate("2025-02-25T18:05:00.000Z")
+                    ]
+                  }
+                ]
+              },
+              "then": {
+                "$multiply": ["$value", 1000]
+              },
+              "else": {
+                "$cond": {
+                  "if": {
+                    "$and": [
+                      {
+                        "$eq": ["$metadata.measurementType", "powerActiveImport"]
+                      },
+                      {
+                        "$gte": [
+                          "$timestamp",
+                          ISODate("2025-02-25T18:00:00.000Z")
+                        ]
+                      },
+                      {
+                        "$lt": [
+                          "$timestamp",
+                          ISODate("2025-02-25T18:05:00.000Z")
+                        ]
+                      }
+                    ]
+                  },
+                  "then": "$value",
+                  "else": null
+                }
+              }
+            }
+          }
+        },
+        "maxAmperageReadings": {
+          "$push": {
+            "$cond": {
+              "if": {
+                "$and": [
+                  {
+                    "$eq": ["$metadata.measurementType", "currentImport"]
+                  },
+                  {
+                    "$gte": [
+                      "$timestamp",
+                      ISODate("2025-02-25T18:00:00.000Z")
+                    ]
+                  },
+                  {
+                    "$lt": [
+                      "$timestamp",
+                      ISODate("2025-02-25T18:05:00.000Z")
+                    ]
+                  }
+                ]
+              },
+              "then": "$value",
+              "else": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "$addFields": {
+        "energyReadings": {
+          "$filter": {
+            "input": "$allEnergyReadings",
+            "as": "reading",
+            "cond": {
+              "$and": [
+                {
+                  "$eq": [
+                    "$$reading.measurementType",
+                    "energyActiveImportRegister"
+                  ]
+                },
+                {
+                  "$gte": [
+                    "$$reading.timestamp",
+                    ISODate("2025-02-25T18:00:00.000Z")
+                  ]
+                },
+                {
+                  "$lt": [
+                    "$$reading.timestamp",
+                    ISODate("2025-02-25T18:05:00.000Z")
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "maxPowerReadings": {
+          "$filter": {
+            "input": "$maxPowerReadings",
+            "as": "item",
+            "cond": { "$ne": ["$$item", null] }
+          }
+        },
+        "maxAmperageReadings": {
+          "$filter": {
+            "input": "$maxAmperageReadings",
+            "as": "item",
+            "cond": { "$ne": ["$$item", null] }
+          }
+        }
+      }
+    },
+    {
+      "$addFields": {
+        "previousReading": {
+          "$cond": {
+            "if": {
+              "$gt": [{ "$size": "$energyReadings" }, 0]
+            },
+            "then": {
+              "$let": {
+                "vars": {
+                  "firstTimestamp": {
+                    "$getField": {
+                      "field": "timestamp",
+                      "input": {
+                        "$arrayElemAt": ["$energyReadings", 0]
+                      }
+                    }
+                  }
+                },
+                "in": {
+                  "$first": {
+                    "$filter": {
+                      "input": "$allEnergyReadings",
+                      "as": "reading",
+                      "cond": {
+                        "$and": [
+                          {
+                            "$eq": [
+                              "$$reading.measurementType",
+                              "energyActiveImportRegister"
+                            ]
+                          },
+                          {
+                            "$lt": ["$$reading.timestamp", "$$firstTimestamp"]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "else": null
+          }
+        }
+      }
+    },
+    {
+      "$group": {
+        "_id": {
+          "locationId": "$_id.locationId",
+          "networkId": "$_id.networkId",
+          "binStart": "$_id.binStart"
+        },
+        "totalEnergyUsage": {
+          "$sum": {
+            "$reduce": {
+              "input": {
+                "$range": [1, { "$size": "$energyReadings" }]
+              },
+              "initialValue": 0,
+              "in": {
+                "$add": [
+                  "$$value",
+                  {
+                    "$let": {
+                      "vars": {
+                        "currentReading": {
+                          "$arrayElemAt": ["$energyReadings", "$$this"]
+                        },
+                        "previousReading": {
+                          "$arrayElemAt": [
+                            "$energyReadings",
+                            { "$subtract": ["$$this", 1] }
+                          ]
+                        },
+                        "difference": {
+                          "$subtract": [
+                            {
+                              "$getField": {
+                                "field": "value",
+                                "input": {
+                                  "$arrayElemAt": ["$energyReadings", "$$this"]
+                                }
+                              }
+                            },
+                            {
+                              "$getField": {
+                                "field": "value",
+                                "input": {
+                                  "$arrayElemAt": [
+                                    "$energyReadings",
+                                    { "$subtract": ["$$this", 1] }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "in": {
+                        "$cond": {
+                          "if": {
+                            "$and": [
+                              { "$gt": ["$$difference", 0] },
+                              {
+                                "$eq": [
+                                  {
+                                    "$getField": {
+                                      "field": "unit",
+                                      "input": {
+                                        "$arrayElemAt": ["$energyReadings", "$$this"]
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "$getField": {
+                                      "field": "unit",
+                                      "input": {
+                                        "$arrayElemAt": [
+                                          "$energyReadings",
+                                          { "$subtract": ["$$this", 1] }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          "then": {
+                            "$multiply": [
+                              "$$difference",
+                              {
+                                "$cond": {
+                                  "if": {
+                                    "$eq": [
+                                      {
+                                        "$getField": {
+                                          "field": "unit",
+                                          "input": {
+                                            "$arrayElemAt": ["$energyReadings", "$$this"]
+                                          }
+                                        }
+                                      },
+                                      "kWh"
+                                    ]
+                                  },
+                                  "then": 1000,
+                                  "else": 1
+                                }
+                              }
+                            ]
+                          },
+                          "else": 0
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "estimatedPeakPower": {
+          "$max": {
+            "$max": "$maxPowerReadings"
+          }
+        },
+        "estimatedPeakAmperage": {
+          "$max": {
+            "$max": "$maxAmperageReadings"
+          }
+        }
+      }
+    },
+    {
+      "$match": {
+        "_id.binStart": { "$gte": ISODate("2025-02-25T18:00:00.000Z") }
+      }
+    },
+    {
+      "$set": {
+        "binStart": "$_id.binStart",
+        "binEnd": {
+          "$add": ["$_id.binStart", 1000 * 60 * 5]
+        },
+        "locationId": "$_id.locationId",
+        "networkId": "$_id.networkId",
+        "updatedAt": "$$NOW"
+      }
+    },
+    {
+      "$unset": "_id"
+    }
+]
+  
